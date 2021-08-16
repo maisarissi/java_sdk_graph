@@ -1,1 +1,1 @@
-# java_sdk_graph
+# java_sdk_graph_tutorial
