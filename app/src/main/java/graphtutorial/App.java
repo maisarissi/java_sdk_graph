@@ -1,10 +1,13 @@
 package graphtutorial;
 
-import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Properties;
 
+import com.azure.core.credential.AccessToken;
+import com.azure.core.credential.TokenRequestContext;
+import com.azure.identity.DeviceCodeCredential;
+import com.azure.identity.DeviceCodeCredentialBuilder;
 import com.google.gson.JsonElement;
 import com.microsoft.graph.models.Event;
 import com.microsoft.graph.models.GiphyRatingType;
@@ -12,31 +15,52 @@ import com.microsoft.graph.models.Team;
 import com.microsoft.graph.models.TeamFunSettings;
 import com.microsoft.graph.models.TeamMemberSettings;
 import com.microsoft.graph.models.TeamMessagingSettings;
-import com.microsoft.graph.tasks.PageIterator;
+import com.microsoft.graph.core.tasks.PageIterator;
 import com.microsoft.graph.users.item.calendarview.delta.DeltaGetResponse;
-
 
 /**
  * Graph Tutorial
  *
  */
 public class App {
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) throws Exception {
         System.out.println("Java Graph Tutorial");
         System.out.println();
     
-        final Properties oAuthProperties = new Properties();
-        try {
-            oAuthProperties.load(App.class.getResourceAsStream("oAuth.properties"));
-        } catch (IOException e) {
-            System.out.println("Unable to read OAuth configuration. Make sure you have a properly formatted oAuth.properties file. See README for details.");
-            return;
-        }
+        final Properties properties = new Properties();
+        properties.load(App.class.getResourceAsStream("oAuth.properties"));
     
-        initializeGraph(oAuthProperties);
-        getUserAccess();
+        final String clientId = properties.getProperty("app.clientId");
+        final String tenantId = properties.getProperty("app.tenantId");
+        final String[] graphUserScopes = properties.getProperty("app.graphUserScopes").split(",");
 
-        DeltaGetResponse deltas = Graph.graphClient.me()
+        DeviceCodeCredential deviceCodeCredential = new DeviceCodeCredentialBuilder()
+            .clientId(clientId)
+            .tenantId(tenantId)
+            .challengeConsumer(challenge -> System.out.println(challenge.getMessage()))
+            .build();
+
+        //create a client for calling v1.0 endpoint
+        com.microsoft.graph.serviceclient.GraphServiceClient graphClient = 
+            new com.microsoft.graph.serviceclient.GraphServiceClient(
+                deviceCodeCredential,
+                graphUserScopes);
+        
+        com.microsoft.graph.models.User me = graphClient.me().get();
+        System.out.println("V1: " + me.getDisplayName());
+
+        //create a client for calling beta endpoint
+        com.microsoft.graph.beta.serviceclient.GraphServiceClient betaGraphClient = 
+            new com.microsoft.graph.beta.serviceclient.GraphServiceClient(
+                deviceCodeCredential,
+                graphUserScopes);
+        
+        com.microsoft.graph.beta.models.User meBeta = betaGraphClient.me().get();
+        System.out.println("Beta: " + meBeta.getDisplayName()); 
+
+        getUserToken(properties, deviceCodeCredential);
+
+        DeltaGetResponse deltas = graphClient.me()
             .calendarView()
             .delta()
             .get(requestConfiguration -> {
@@ -44,29 +68,29 @@ public class App {
                 requestConfiguration.queryParameters.endDateTime = "2023-12-07T21:28:37.145Z";
             });  
 
-        getEvents(deltas);
+        getEvents(deltas, graphClient);
 
         Thread.sleep(10000);
 
         //when you process run out of events, you can use the deltaLink to get the next set of events in the next iteration
-        DeltaGetResponse deltas2 = Graph.graphClient.me()
+        DeltaGetResponse deltas2 = graphClient.me()
             .calendarView()
             .delta()
             .withUrl(deltas.getOdataDeltaLink())
             .get();
         
-        getEvents(deltas2);
+        getEvents(deltas2, graphClient);
 
         Thread.sleep(10000);
 
         //when you process run out of events, you can use the deltaLink to get the next set of events in the next iteration
-        DeltaGetResponse deltas3 = Graph.graphClient.me()
+        DeltaGetResponse deltas3 = graphClient.me()
             .calendarView()
             .delta()
             .withUrl(deltas2.getOdataDeltaLink())
             .get();
         
-        getEvents(deltas3);
+        getEvents(deltas3, graphClient);
 
         Team team = new Team();
         TeamMemberSettings memberSettings = new TeamMemberSettings();
@@ -82,37 +106,32 @@ public class App {
         funSettings.setGiphyContentRating(GiphyRatingType.Strict);
         team.setFunSettings(funSettings);
 
-        Graph.graphClient.groups().byGroupId("id").team()
+        graphClient.groups().byGroupId("id").team()
             .put(team);                
     }
 
-    private static void initializeGraph(Properties properties) {
-        try {
-            Graph.initializeGraphForUserAuth(properties,
-                challenge -> System.out.println(challenge.getMessage()));
-        } catch (Exception e)
-        {
-            System.out.println("Error initializing Graph for user auth");
-            System.out.println(e.getMessage());
+    public static String getUserToken(Properties properties, DeviceCodeCredential deviceCodeCredential) throws Exception {
+        // Ensure credential isn't null
+        if (deviceCodeCredential == null) {
+            throw new Exception("Graph has not been initialized for user auth");
         }
+    
+        final String[] graphUserScopes = properties.getProperty("app.graphUserScopes").split(",");
+    
+        final TokenRequestContext context = new TokenRequestContext();
+        context.addScopes(graphUserScopes);
+    
+        final AccessToken token = deviceCodeCredential.getToken(context).block();
+        return token.getToken();
     }
 
-    private static void getUserAccess() {
-        try {
-            System.out.println(Graph.getUserToken());
-        } catch (Exception e) {
-            System.out.println("Error getting access token");
-            System.out.println(e.getMessage());
-        }
-    }
-
-    private static void getEvents(DeltaGetResponse deltas) {
+    private static void getEvents(DeltaGetResponse deltas, com.microsoft.graph.serviceclient.GraphServiceClient graphClient) {
         List<Event> events = new LinkedList<Event>();
         
         try {
             PageIterator<Event, DeltaGetResponse> pageIterator = new PageIterator
                 .Builder<Event, DeltaGetResponse>()
-                .client(Graph.graphClient)
+                .client(graphClient)
                 .collectionPage(deltas)
                 .collectionPageFactory(DeltaGetResponse::createFromDiscriminatorValue)
                 .processPageItemCallback(delta -> {

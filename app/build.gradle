@@ -21,11 +21,12 @@ repositories {
 dependencies {
     // Use JUnit test framework.
     testImplementation 'junit:junit:4.13.2'
-
-    implementation 'com.google.guava:guava:32.1.3-jre'
     
     // Include the sdk as a dependency
+    //v1.0
     implementation 'com.microsoft.graph:microsoft-graph:6.0.0-SNAPSHOT'
+    //beta
+    implementation 'com.microsoft.graph:microsoft-graph-beta:6.0.0-SNAPSHOT'
 
     // Include the identity as a dependency
     implementation 'com.azure:azure-identity:1.11.0'
