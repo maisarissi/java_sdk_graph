@@ -64,7 +64,7 @@ public class App {
             System.out.println(role.getPrincipalDisplayName() + "\n");
         });
 
-        String eventId = "AAMkADM4Njk4YzMzLTc3YTktNGQwZi05ZjRjLTJlNTUzYWMxZjAxNABGAAAAAABzQLabgoJzT6ewNe8DeydoBwBoFwNVrXtLQ5PleemFoZ87AAAAAAENAABoFwNVrXtLQ5PleemFoZ87AAA33T-eAAA=";
+        String eventId = properties.getProperty("app.eventId");
         System.out.println(graphClient.me().calendar().events().byEventId(eventId).toGetRequestInformation().getUri());
 
         // get the object 
