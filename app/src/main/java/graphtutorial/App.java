@@ -9,6 +9,7 @@ import com.azure.core.credential.TokenRequestContext;
 import com.azure.identity.DeviceCodeCredential;
 import com.azure.identity.DeviceCodeCredentialBuilder;
 import com.google.gson.JsonElement;
+import com.microsoft.graph.models.AppRoleAssignmentCollectionResponse;
 import com.microsoft.graph.models.Event;
 import com.microsoft.graph.models.GiphyRatingType;
 import com.microsoft.graph.models.Team;
@@ -56,9 +57,34 @@ public class App {
                 graphUserScopes);
         
         com.microsoft.graph.beta.models.User meBeta = betaGraphClient.me().get();
-        System.out.println("Beta: " + meBeta.getDisplayName()); 
+        System.out.println("Beta: " + meBeta.getDisplayName());
+        
+        AppRoleAssignmentCollectionResponse response = graphClient.me().appRoleAssignments().get();
+        response.getValue().forEach(role -> {
+            System.out.println(role.getPrincipalDisplayName() + "\n");
+        });
 
-        getUserToken(properties, deviceCodeCredential);
+        String eventId = "AAMkADM4Njk4YzMzLTc3YTktNGQwZi05ZjRjLTJlNTUzYWMxZjAxNABGAAAAAABzQLabgoJzT6ewNe8DeydoBwBoFwNVrXtLQ5PleemFoZ87AAAAAAENAABoFwNVrXtLQ5PleemFoZ87AAA33T-eAAA=";
+        System.out.println(graphClient.me().calendar().events().byEventId(eventId).toGetRequestInformation().getUri());
+
+        // get the object 
+        Event event = graphClient.me()
+        .calendar()
+        .events()
+        .byEventId(eventId)
+        .get(requestConfiguration -> {
+            requestConfiguration.queryParameters.select = 
+                new String[] {"subject,body,bodyPreview,organizer,attendees,start,end,location,locations"};
+        });
+
+        // the backing store will keep track that the property change and send the updated value. 
+        event.setRecurrence(null); // set to null  
+
+        // update the object 
+        graphClient.me()
+            .events()
+            .byEventId("event-id")
+            .patch(event);
 
         DeltaGetResponse deltas = graphClient.me()
             .calendarView()
